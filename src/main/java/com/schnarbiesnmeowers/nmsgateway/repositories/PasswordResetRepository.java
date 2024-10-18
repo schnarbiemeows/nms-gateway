@@ -2,14 +2,16 @@ package com.schnarbiesnmeowers.nmsgateway.repositories;
 
 import com.schnarbiesnmeowers.nmsgateway.entities.PasswordReset;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Mono;
 
 /**
  *
  * @author Dylan I. Kessler
  *
  */
-public interface PasswordResetRepository extends JpaRepository<PasswordReset, Integer>{
+public interface PasswordResetRepository extends ReactiveCrudRepository<PasswordReset, Integer> {
 
-	PasswordReset findUserByEmailAddr(String emailAddr);
-	PasswordReset findUserByUniqueId(String uniqueId);
+	Mono<PasswordReset> findUserByEmailAddr(String emailAddr);
+	Mono<PasswordReset> findUserByUniqueId(String uniqueId);
 }

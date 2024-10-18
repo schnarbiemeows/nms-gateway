@@ -22,6 +22,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
 
 import javax.mail.MessagingException;
 import javax.mail.NoSuchProviderException;
@@ -74,7 +75,7 @@ public class UserController extends AppUserExceptionHandling {
 	 * this method allows the user to register an account
 	 * 
 	 * @param user
-	 * @return ResponseEntity<AppUserDTO>
+	 * @return Mono<AppUserDTO>
 	 * @throws UserNotFoundException
 	 * @throws UsernameExistsException
 	 * @throws EmailExistsException
@@ -83,33 +84,33 @@ public class UserController extends AppUserExceptionHandling {
 	 * @throws UserFieldsNotValidException
 	 */
 	@PostMapping(path = "/register")
-	public ResponseEntity<AppUserDTO> register(@RequestBody AppUserTempDTO user)
+	public Mono<ResponseEntity<AppUserDTO>> register(@RequestBody AppUserTempDTO user)
 			throws UserNotFoundException, UsernameExistsException, EmailExistsException,
 			AddressException,
 			MessagingException, UserFieldsNotValidException {
 		logAction("attempting to validate new user registration");
 		userBusinessService.validateFields(user);
 		logAction("new user registration validated");
-		AppUser newUser = userService.register(user.getFirstName(), user.getLastName(), user.getUserName(),
+		Mono<AppUser> newUser = userService.register(user.getFirstName(), user.getLastName(), user.getUserName(),
 				user.getEmail(), user.getPassword());
-		return new ResponseEntity<>(newUser.toDTO(), HttpStatus.OK);
+		return newUser.map(rec -> new ResponseEntity<>(rec.toDTO(),HttpStatus.OK));
 	}
 
 	@PostMapping(path = "/confirmemail")
-	public ResponseEntity<AppUserDTO> confirmEmail(@RequestBody String id)
+	public Mono<ResponseEntity<AppUserDTO>> confirmEmail(@RequestBody String id)
 			throws ExpiredLinkException, UserNotFoundException {
 		logEmailAction("initiating email confirmation process");
-		AppUser newUser = userService.confirmEmail(id);
+		Mono<AppUser> newUser = userService.confirmEmail(id);
 		logEmailAction("email confirmation process completed");
-		return new ResponseEntity<>(newUser.toDTO(), HttpStatus.OK);
+		return newUser.map(rec -> new ResponseEntity<>(rec.toDTO(),HttpStatus.OK));
 	}
 
 	/*
-	 * @PostMapping(path = "/setrole") public ResponseEntity<AppUserDTO>
+	 * @PostMapping(path = "/setrole") public Mono<AppUserDTO>
 	 * setRole(@RequestBody AppUserDTO user) throws UserNotFoundException,
 	 * UsernameExistsException, EmailExistsException, AddressException,
 	 * MessagingException, UserFieldsNotValidException {
-	 * userService.setRole(user.getUserName()); return new ResponseEntity<>(user,
+	 * userService.setRole(user.getUserName()); return new Mono<>(user,
 	 * HttpStatus.OK); }
 	 */
 	/**
@@ -122,17 +123,19 @@ public class UserController extends AppUserExceptionHandling {
 	 * @throws ParseException 
 	 */
 	@PostMapping(path = "/login")
-	public ResponseEntity<AppUserDTO> login(@RequestBody AppUserDTO user)
+	public Mono<ResponseEntity<AppUserDTO>> login(@RequestBody AppUserDTO user)
 			throws UserNotFoundException, UsernameExistsException, EmailExistsException, ParseException {
 		logAction("initiating the login process, authenticating the user");
 		authenticate(user.getUserName(), user.getPassword());
 		logAction("user has been authenticated");
-		AppUserDTO loggedInUser = userService.findUserByUsername(user.getUserName()).toDTO();
-		userService.checkPasswordResetTable(loggedInUser);
-		UserPrincipal loggedInUserPrincipal = new UserPrincipal(loggedInUser);
+		Mono<AppUserDTO> loggedInUser = userService.findUserByUsername(user.getUserName())
+				.map(rec -> rec.toDTO());
+		userService.checkThePasswordResetTable(String.valueOf(loggedInUser.map(rec -> rec.getEmail())));
+		UserPrincipal loggedInUserPrincipal = loggedInUser.map(rec ->
+				new UserPrincipal(rec));
 		HttpHeaders jwtHeader = getJwtHeader(loggedInUserPrincipal);
 		logAction("login process completed");
-		return new ResponseEntity<>(loggedInUser, jwtHeader, HttpStatus.OK);
+		return new Mono<>(loggedInUser, jwtHeader, HttpStatus.OK);
 	}
 
 	/**
@@ -148,7 +151,7 @@ public class UserController extends AppUserExceptionHandling {
 	 * @throws EmailNotFoundException
 	 */
 	@PostMapping("/forgotpassword")
-	public ResponseEntity<HttpResponse> forgotPassword(@RequestBody String email)
+	public Mono<HttpResponse> forgotPassword(@RequestBody String email)
 			throws MessagingException, EmailNotFoundException {
 		logEmailAction("initiating the forgot password reset process");
 		userService.resetPasswordInitiation(email);
@@ -169,13 +172,13 @@ public class UserController extends AppUserExceptionHandling {
 	 * @throws MessagingException
 	 */
 	@PostMapping(path = "/checkreset")
-	public ResponseEntity<CheckPasswordResetResponseDTO> checkPasswordReset(@RequestBody String code)
+	public Mono<CheckPasswordResetResponseDTO> checkPasswordReset(@RequestBody String code)
 			throws ExpiredLinkException, UserNotFoundException, AddressException, NoSuchProviderException,
 			SendFailedException, MessagingException {
 		logEmailAction("initiating the check password reset process");
 		CheckPasswordResetResponseDTO results = userService.checkPasswordResetTable(code);
 		logEmailAction("check password reset process completed");
-		return new ResponseEntity<>(results, HttpStatus.OK);
+		return new Mono<>(results, HttpStatus.OK);
 	}
 	
 	/**
@@ -191,12 +194,12 @@ public class UserController extends AppUserExceptionHandling {
 	 * @throws PasswordResetException
 	 */
 	@PostMapping(path = "/finalizepassword")
-	public ResponseEntity<AppUserDTO> finalizePasswordReset(@RequestBody PasswordResetDTO input)
+	public Mono<AppUserDTO> finalizePasswordReset(@RequestBody PasswordResetDTO input)
 			throws ExpiredLinkException, UserNotFoundException, AddressException, NoSuchProviderException, SendFailedException, MessagingException, PasswordResetException {
 		logEmailAction("initiating the password reset finalization process");
 		AppUserDTO results = userService.changePassword(input);
 		logEmailAction("password reset finalization process completed");
-		return new ResponseEntity<>(results, HttpStatus.OK);
+		return new Mono<>(results, HttpStatus.OK);
 	}
 	
 	/**
@@ -208,7 +211,7 @@ public class UserController extends AppUserExceptionHandling {
 	 * @throws EmailNotFoundException
 	 */
 	@PostMapping("/forgotusername")
-	public ResponseEntity<HttpResponse> forgotUsername(@RequestBody String email)
+	public Mono<HttpResponse> forgotUsername(@RequestBody String email)
 			throws MessagingException, EmailNotFoundException {
 		logEmailAction("initiating the forgot username email process");
 		userService.forgotUsername(email);
@@ -224,7 +227,7 @@ public class UserController extends AppUserExceptionHandling {
 	 */
 	@PostMapping(path = "/updateuserbyuser")
 	@PreAuthorize("hasAnyAuthority('self:update')")
-	public ResponseEntity<AppUserDTO> updateUserByUser(@Valid @RequestBody AppUserDTOWrapper data)
+	public Mono<AppUserDTO> updateUserByUser(@Valid @RequestBody AppUserDTOWrapper data)
 			throws Exception {
 		if (data.getNewPassword() != null) {
 			try {
@@ -234,7 +237,7 @@ public class UserController extends AppUserExceptionHandling {
 			}
 		}
 		AppUserDTO updatedData = userService.updateUserByUser(data).toDTO();
-		return ResponseEntity.status(HttpStatus.OK).body(updatedData);
+		return Mono.status(HttpStatus.OK).body(updatedData);
 	}
 
 	/**
@@ -244,9 +247,9 @@ public class UserController extends AppUserExceptionHandling {
 	 */
 	@GetMapping(path = "/all")
 	@PreAuthorize("hasAnyAuthority('admin:select')")
-	public ResponseEntity<List<AppUserDTO>> getAllAppUser() throws Exception {
+	public Mono<List<AppUserDTO>> getAllAppUser() throws Exception {
 		List<AppUserDTO> interviewuser = userBusinessService.getAllAppUser();
-		return ResponseEntity.status(HttpStatus.OK).body(interviewuser);
+		return Mono.status(HttpStatus.OK).body(interviewuser);
 	}
 
 	/**
@@ -257,9 +260,9 @@ public class UserController extends AppUserExceptionHandling {
 	 */
 	@GetMapping(path = "/findById/{id}")
 	@PreAuthorize("hasAnyAuthority('admin:select')")
-	public ResponseEntity<AppUserDTO> findAppUserById(@PathVariable int id) throws Exception {
+	public Mono<AppUserDTO> findAppUserById(@PathVariable int id) throws Exception {
 		AppUserDTO results = userBusinessService.findAppUserById(id);
-		return ResponseEntity.status(HttpStatus.OK).body(results);
+		return Mono.status(HttpStatus.OK).body(results);
 	}
 
 	/**
@@ -270,13 +273,13 @@ public class UserController extends AppUserExceptionHandling {
 	 */
 	@PostMapping(path = "/create")
 	@PreAuthorize("hasAnyAuthority('admin:create','user:create')")
-	public ResponseEntity<AppUserDTO> createAppUser(@RequestHeader("Authorization") String token,
+	public Mono<AppUserDTO> createAppUser(@RequestHeader("Authorization") String token,
 			@Valid @RequestBody AppUserDTO data) throws Exception {
 		String alteredToken = removeBearerFromToken(token);
 		String adminUser = jwtTokenProvider.getSubject(alteredToken);
 		String[] authorizations = jwtTokenProvider.getClaimsFromToken(alteredToken);
 		AppUserDTO createdData = userBusinessService.createAppUser(data, authorizations, adminUser);
-		return ResponseEntity.status(HttpStatus.CREATED).body(createdData);
+		return Mono.status(HttpStatus.CREATED).body(createdData);
 
 	}
 
@@ -290,13 +293,13 @@ public class UserController extends AppUserExceptionHandling {
 	 */
 	@PostMapping(path = "/update")
 	@PreAuthorize("hasAnyAuthority('admin:update','user:update')")
-	public ResponseEntity<AppUserDTO> updateAppUser(@RequestHeader("Authorization") String token,
+	public Mono<AppUserDTO> updateAppUser(@RequestHeader("Authorization") String token,
 			@Valid @RequestBody AppUserDTOWrapper data) throws Exception {
 		String alteredToken = removeBearerFromToken(token);
 		String adminUser = jwtTokenProvider.getSubject(alteredToken);
 		String[] authorizations = jwtTokenProvider.getClaimsFromToken(alteredToken);
 		AppUserDTO updatedData = userBusinessService.updateAppUser(data, authorizations, adminUser);
-		return ResponseEntity.status(HttpStatus.OK).body(updatedData);
+		return Mono.status(HttpStatus.OK).body(updatedData);
 	}
 
 	/**
@@ -306,14 +309,14 @@ public class UserController extends AppUserExceptionHandling {
 	 */
 	@DeleteMapping(path = "/delete/{username}")
 	@PreAuthorize("hasAnyAuthority('admin:delete','user:delete')")
-	public ResponseEntity<ResponseMessage> deleteAppUser(@RequestHeader("Authorization") String token,
+	public Mono<ResponseMessage> deleteAppUser(@RequestHeader("Authorization") String token,
 														 @PathVariable String username) throws Exception {
 		String alteredToken = removeBearerFromToken(token);
 		String[] authorizations = jwtTokenProvider.getClaimsFromToken(alteredToken);
 		String adminUser = jwtTokenProvider.getSubject(alteredToken);
 		userBusinessService.deleteAppUser(username, authorizations, adminUser);
 		ResponseMessage rb = new ResponseMessage("successfully deleted");
-		return ResponseEntity.status(HttpStatus.OK).body(rb);
+		return Mono.status(HttpStatus.OK).body(rb);
 	}
 
 	/**
@@ -358,18 +361,18 @@ public class UserController extends AppUserExceptionHandling {
 	 * @param message
 	 * @return
 	 */
-	private ResponseEntity<HttpResponse> response(HttpStatus httpStatus, String message) {
-		return new ResponseEntity<>(
+	private Mono<HttpResponse> response(HttpStatus httpStatus, String message) {
+		return new Mono<>(
 				new HttpResponse(httpStatus.value(), httpStatus, httpStatus.getReasonPhrase().toUpperCase(), message),
 				httpStatus);
 	}
 
 	@PostMapping(path = "/setrole")
-	public ResponseEntity<AppUserDTO> setRole(@RequestBody AppUserDTO user)
+	public Mono<AppUserDTO> setRole(@RequestBody AppUserDTO user)
 			throws UserNotFoundException, UsernameExistsException, EmailExistsException, AddressException,
 			MessagingException, UserFieldsNotValidException {
 		userService.setRole(user.getUserName());
-		return new ResponseEntity<>(user, HttpStatus.OK);
+		return new Mono<>(user, HttpStatus.OK);
 	}
 
 	/**
@@ -384,15 +387,15 @@ public class UserController extends AppUserExceptionHandling {
 	 * @throws UserFieldsNotValidException
 	 */
 	@PostMapping(path = "/setpwd")
-	public ResponseEntity<AppUserDTO> setPassword(@RequestBody AppUserDTO user)
+	public Mono<AppUserDTO> setPassword(@RequestBody AppUserDTO user)
 			throws UserNotFoundException, UsernameExistsException, EmailExistsException, AddressException,
 			MessagingException, UserFieldsNotValidException {
 		userService.setPassword(user.getUserName(), user.getPassword());
-		return new ResponseEntity<>(user, HttpStatus.OK);
+		return new Mono<>(user, HttpStatus.OK);
 	}
 
 	@GetMapping("/testemail")
-	public ResponseEntity<HttpResponse> testEmail() throws AddressException, MessagingException, Exception {
+	public Mono<HttpResponse> testEmail() throws AddressException, MessagingException, Exception {
 		logEmailAction("running an email test");
 		userService.testEmail();
 		logEmailAction("email test complete");

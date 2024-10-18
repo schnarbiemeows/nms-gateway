@@ -17,16 +17,20 @@ import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.CorsConfigurer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.client.RestOperations;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.cors.CorsConfiguration;
@@ -36,17 +40,19 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.Arrays;
 
 @Configuration
-@EnableWebSecurity
-//@EnableWebFluxSecurity
-//@EnableMethodSecurity
+//@EnableWebSecurity
+@EnableWebFluxSecurity
+@EnableReactiveMethodSecurity
 @EnableGlobalMethodSecurity(prePostEnabled = true)
 public class SecurityConfiguration /*extends WebSecurityConfigurerAdapter*/ {
 
 	private JwtAuthorizationFilter jwtAuthorizationFilter;
 	private JwtAccessDeniedHandler jwtAccessDeniedHandler;
 	private JwtFailedAuth403MessageHandler jwtAuthenticationEntryPoint;
-	private UserDetailsService userDetailsService;
+	private ReactiveUserDetailsService userDetailsService;
 	private PasswordEncoder bCryptPasswordEncoder;
+
+	private AuthenticationManager authenticationManager;
 	private static final Logger applicationLogger = LogManager.getLogger("FileAppender");
 	
 	@Value("${cors.urls}")
@@ -56,21 +62,24 @@ public class SecurityConfiguration /*extends WebSecurityConfigurerAdapter*/ {
 	public SecurityConfiguration(JwtAuthorizationFilter jwtAuthorizationFilter,
 			JwtAccessDeniedHandler jwtAccessDeniedHandler, 
 			JwtFailedAuth403MessageHandler jwtAuthenticationEntryPoint,
-			@Qualifier("UserDetailsService")UserDetailsService userDetailsService,
-			PasswordEncoder bCryptPasswordEncoder) {
+			@Qualifier("UserDetailsService")ReactiveUserDetailsService userDetailsService,
+			PasswordEncoder bCryptPasswordEncoder,
+								 AuthenticationManager authenticationManager) {
 		super();
 		this.jwtAuthorizationFilter = jwtAuthorizationFilter;
 		this.jwtAccessDeniedHandler = jwtAccessDeniedHandler;
 		this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
 		this.userDetailsService = userDetailsService;
 		this.bCryptPasswordEncoder = bCryptPasswordEncoder;
+		this.authenticationManager = authenticationManager;
 	}
 
 
 
 	@Bean
-	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+	public SecurityWebFilterChain securityFilterChain(ServerHttpSecurity http) throws Exception {
 		return http
+				.authenticationManager(authenticationManager)
 				.cors(corsCustomizer())
 				.csrf(AbstractHttpConfigurer::disable)
 				.sessionManagement(session -> session
